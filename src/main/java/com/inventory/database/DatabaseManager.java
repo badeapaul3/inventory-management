@@ -9,11 +9,12 @@ import java.sql.SQLException;
  */
 public class DatabaseManager {
     private static final String URL = "jdbc:sqlite:inventory.sqlite"; // Database URL
+    private static final String DRIVER = "org.sqlite.JDBC";
     private static DatabaseManager instance; // Singleton instance
 
     private DatabaseManager() {
         try {
-            Class.forName("org.sqlite.JDBC"); // Load SQLite driver
+            Class.forName(DRIVER); // Load SQLite driver
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("Failed to load SQLite driver", e);
         }

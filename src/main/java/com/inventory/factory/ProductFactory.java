@@ -9,7 +9,7 @@ import java.time.LocalDate;
  */
 public class ProductFactory {
 
-    public static Product createProduct(String name, double price, int stock, LocalDate expirationDate) {
-        return new Product(0, name, price, stock, expirationDate); // ID set to 0 (auto-incremented in DB)
+    public static Product createProduct(int id, String name, double price, int stock, LocalDate expirationDate) {
+        return new Product(id, name, price, stock, expirationDate); // ID set to 0 (auto-incremented in DB)
     }
 }
