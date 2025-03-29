@@ -1,6 +1,7 @@
 package com.inventory.dao;
 
 import com.inventory.database.DatabaseManager;
+import com.inventory.exception.ExpiredProductException;
 import com.inventory.model.Product;
 import com.inventory.validation.ProductValidator;
 
@@ -27,12 +28,18 @@ public class ProductDAO implements AutoCloseable{
 
     /**
      * Inserts a product or updates stock if it already exists.
+     * Throws ExpiredProductException if the product is expired.
      */
     public void insertOrUpdateProduct(Product product) {
         lock.lock();
         try {
             // Validate product using Reflection & Annotations
             ProductValidator.validateProduct(product);
+
+            // Additional explicit check for expiration to throw ExpiredProductException
+            if (product.expirationDate().isBefore(LocalDate.now())) {
+                throw new ExpiredProductException("Product '" + product.name() + "' is expired (expiration: " + product.expirationDate() + ").");
+            }
 
             String checkQuery = "SELECT id, stock FROM Product WHERE name = ? AND price = ? AND expiration_date = ?";
             String insertQuery = "INSERT INTO Product (name, price, stock, expiration_date) VALUES (?, ?, ?, ?)";
@@ -71,7 +78,7 @@ public class ProductDAO implements AutoCloseable{
     /**
      * Retrieves all products from the database.
      */
-    public List<Product> getAllProducts() {
+    public List<Product> getAllProducts(boolean throwOnExpired) {
         List<Product> products = new ArrayList<>();
         String query = "SELECT id, name, price, stock, expiration_date FROM Product"; // 🟢 Correct order (Stock first)
 
@@ -81,13 +88,16 @@ public class ProductDAO implements AutoCloseable{
             while (rs.next()) {
                 // Convert the expirationDate string to LocalDate
                 LocalDate expirationDate = LocalDate.parse(rs.getString("expiration_date"));
-                products.add(new Product(
+                Product product = new Product(
                         rs.getInt("id"),
                         rs.getString("name"),
                         rs.getDouble("price"),
                         rs.getInt("stock"), // 🟢 Correct order (Stock first)
                         expirationDate // 🟢 Correct order (ExpirationDate second)
-                ));
+                );
+
+                if(throwOnExpired && expirationDate.isBefore(LocalDate.now())) throw new ExpiredProductException("Product '" + product.name() + "' is expired since " + expirationDate);
+                products.add(product);
             }
         } catch (SQLException e) {
             throw new RuntimeException("Error retrieving products", e);

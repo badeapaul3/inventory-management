@@ -9,5 +9,9 @@ import java.lang.annotation.Target;
 @Target(ElementType.FIELD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ValidateProduct {
+    boolean notNull() default true; // Whether the field can be null
+    boolean notEmpty() default false; // String if it can be empty
+    double minValue() default Double.MIN_VALUE; // Minimum value for numeric fields
+    boolean allowPastDate() default  false; // For LocalDate: allow past dates
 
 }
