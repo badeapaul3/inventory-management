@@ -30,15 +30,20 @@ public class ProductDAO implements AutoCloseable{
      * Inserts a product or updates stock if it already exists.
      * Throws ExpiredProductException if the product is expired.
      */
-    public void insertOrUpdateProduct(Product product) {
+    public void insertOrUpdateProduct(Product product, boolean throwOnExpired) {
         lock.lock();
         try {
-            // Validate product using Reflection & Annotations
             ProductValidator.validateProduct(product);
 
-            // Additional explicit check for expiration to throw ExpiredProductException
+            // Check for expiration
             if (product.expirationDate().isBefore(LocalDate.now())) {
-                throw new ExpiredProductException("Product '" + product.name() + "' is expired (expiration: " + product.expirationDate() + ").");
+                String message = "Product '" + product.name() + "' is expired (expiration: " + product.expirationDate() + ").";
+                if (throwOnExpired) {
+                    throw new ExpiredProductException(message);
+                } else {
+                    System.err.println("Warning: " + message + " Skipping insertion.");
+                    return; // Skip insertion
+                }
             }
 
             String checkQuery = "SELECT id, stock FROM Product WHERE name = ? AND price = ? AND expiration_date = ?";
@@ -48,7 +53,7 @@ public class ProductDAO implements AutoCloseable{
             try (PreparedStatement checkStmt = connection.prepareStatement(checkQuery)) {
                 checkStmt.setString(1, product.name());
                 checkStmt.setDouble(2, product.price());
-                checkStmt.setString(3, product.expirationDate().toString()); // Convert LocalDate to String
+                checkStmt.setString(3, product.expirationDate().toString());
 
                 ResultSet rs = checkStmt.executeQuery();
                 if (rs.next()) {
@@ -62,8 +67,8 @@ public class ProductDAO implements AutoCloseable{
                     try (PreparedStatement insertStmt = connection.prepareStatement(insertQuery)) {
                         insertStmt.setString(1, product.name());
                         insertStmt.setDouble(2, product.price());
-                        insertStmt.setInt(3, product.stock()); // 🟢 Correct order (Stock first)
-                        insertStmt.setString(4, product.expirationDate().toString()); // 🟢 Convert LocalDate to String
+                        insertStmt.setInt(3, product.stock());
+                        insertStmt.setString(4, product.expirationDate().toString());
                         insertStmt.executeUpdate();
                     }
                 }

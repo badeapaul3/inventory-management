@@ -1,5 +1,6 @@
 package com.inventory.validation;
 
+import com.inventory.exception.ExpiredProductException;
 import com.inventory.model.Product;
 
 import java.lang.reflect.Field;
@@ -60,7 +61,7 @@ public class ProductValidator {
         if(value < annotation.minValue()) throw new IllegalArgumentException(fieldName + " must be at least " + annotation.minValue());
     }
     private static void validateLocalDate(String fieldName, LocalDate value, ValidateProduct annotation){
-        if(value.isBefore(LocalDate.now()) && !annotation.allowPastDate()) throw new IllegalArgumentException(fieldName + " cannot be in the past.");
+        if(value.isBefore(LocalDate.now()) && !annotation.allowPastDate()) throw new ExpiredProductException(fieldName + " cannot be in the past.");
     }
 
 
