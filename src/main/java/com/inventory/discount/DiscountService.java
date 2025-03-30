@@ -1,6 +1,7 @@
 package com.inventory.discount;
 
 import com.inventory.model.Product;
+import com.inventory.dao.ProductDAO;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -9,6 +10,12 @@ import java.math.RoundingMode;
  * @author hatzp
  **/
 public class DiscountService {
+
+    private final ProductDAO productDAO;
+
+    public DiscountService(ProductDAO productDAO) {
+        this.productDAO = productDAO;
+    }
 
     public Product applyDiscount(Product product, DiscountStrategy strategy){
         if(product == null || strategy == null){
@@ -28,4 +35,16 @@ public class DiscountService {
                 product.expirationDate()
         );
     }
+
+    public void applyAndSaveDiscount(Product product, DiscountStrategy strategy){
+        if(productDAO == null){
+            throw new IllegalStateException("ProductDAO not initialized. Use constructor with ProductDAO");
+        }
+
+        Product discountedProduct = applyDiscount(product, strategy);
+        productDAO.updateProduct(discountedProduct);
+    }
+
+
+
 }
