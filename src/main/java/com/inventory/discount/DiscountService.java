@@ -32,7 +32,10 @@ public class DiscountService {
                 discountedPrice.doubleValue(),
                 product.stock(),
                 product.expirationDate(),
-                true // Mark as discounted
+                true, // Mark as discounted,
+                product.categoryId(),
+                product.supplierId()
+
         );
     }
 

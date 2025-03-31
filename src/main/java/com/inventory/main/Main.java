@@ -1,18 +1,19 @@
 package com.inventory.main;
 
+import com.inventory.dao.CategoryDAO;
+import com.inventory.dao.HistoryDAO;
 import com.inventory.dao.ProductDAO;
+import com.inventory.dao.SupplierDAO;
 import com.inventory.database.DatabaseInitializer;
-import com.inventory.discount.FlatDiscountStrategy;
-import com.inventory.discount.PercentageDiscountStrategy;
-import com.inventory.model.Product;
+import com.inventory.database.DatabaseManager;
 import com.inventory.service.ProductService;
 import com.inventory.service.ProductServiceImpl;
+import com.inventory.model.Product;
 
-import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.List;
 import java.util.Scanner;
 
 public class Main {
@@ -20,32 +21,33 @@ public class Main {
 
     public static void main(String[] args) {
         DatabaseInitializer.initializeDatabase();
-        try (ProductDAO productDAO = new ProductDAO();
+
+        try (Connection connection = DatabaseManager.getInstance().getConnection();
+             HistoryDAO historyDAO = new HistoryDAO(connection);
+             ProductDAO productDAO = new ProductDAO(connection, historyDAO);
+             CategoryDAO categoryDAO = new CategoryDAO(connection);
+             SupplierDAO supplierDAO = new SupplierDAO(connection);
              Scanner scanner = new Scanner(System.in)) {
-            ProductService productService = new ProductServiceImpl(productDAO);
-            System.out.println("Inventory Management CLI - Enter 'help' for commands.");
+
+            ProductService productService = new ProductServiceImpl(productDAO, categoryDAO, supplierDAO, historyDAO);
 
             while (true) {
                 System.out.print("> ");
                 String input = scanner.nextLine().trim();
-                if (input.isEmpty()) continue;
-
-                String[] parts = input.split("\\s+");
-                String command = parts[0].toLowerCase();
+                if (input.equalsIgnoreCase("exit")) {
+                    break;
+                }
 
                 try {
+                    String[] parts = input.split("\\s+");
+                    String command = parts[0].toLowerCase();
+
                     switch (command) {
-                        case "help":
-                            printHelp();
-                            break;
-                        case "exit":
-                            System.out.println("Exiting...");
-                            return;
                         case "add":
                             handleAdd(productService, parts);
                             break;
                         case "list":
-                            handleList(productService);
+                            productService.getAllProducts().forEach(System.out::println);
                             break;
                         case "update":
                             handleUpdate(productService, parts);
@@ -63,69 +65,59 @@ public class Main {
                             handleAdjust(productService, parts);
                             break;
                         case "auto-discount":
-                            handleAutoDiscount(productService, parts);
+                            productService.adjustStockForExpired();
+                            System.out.println("Expired stock adjusted.");
+                            break;
+                        case "add-category":
+                            handleAddCategory(productService, parts);
+                            break;
+                        case "add-supplier":
+                            handleAddSupplier(productService, parts);
+                            break;
+                        case "help":
+                            handleHelp();
                             break;
                         default:
-                            System.out.println("Unknown command: " + command + ". Type 'help' for options.");
+                            System.out.println("Unknown command: " + command + ". Type 'help' for available commands.");
                     }
                 } catch (Exception e) {
-                    System.err.println("Error: " + e.getMessage());
+                    System.out.println("Error: " + e.getMessage());
                 }
             }
-        } catch (Exception e) {
-            System.err.println("Fatal error: " + e.getMessage());
+        } catch (SQLException e) {
+            System.err.println("Application error: " + e.getMessage());
         }
     }
 
-    private static void printHelp() {
-        System.out.println("Commands:");
-        System.out.println("  add <name> <price> <stock> <expiration>          - Add a product (e.g., add Milk 5.0 100 2025-12-31)");
-        System.out.println("  list                                             - List all products");
-        System.out.println("  update <id> <name> <price> <stock> <expiration>  - Update a product");
-        System.out.println("  delete <id>                                      - Delete a product by ID");
-        System.out.println("  search name <name>                               - Search products by name");
-        System.out.println("  search expiring <date>                           - Search products expiring before date (yyyy-MM-dd)");
-        System.out.println("  discount <id> flat <amount>                      - Apply flat discount to product");
-        System.out.println("  discount <id> percent <percent>                  - Apply percentage discount to product");
-        System.out.println("  adjust <id> <amount>                             - Adjust stock (positive to add, negative to subtract)");
-        System.out.println("  auto-discount [id]                               - Apply dynamic discounts (all products or specific ID)");
-        System.out.println("  help                                             - Show this help");
-        System.out.println("  exit                                             - Exit the app");
-    }
-
     private static void handleAdd(ProductService productService, String[] parts) {
-        if (parts.length != 5) {
-            throw new IllegalArgumentException("Usage: add <name> <price> <stock> <expiration>");
+        if (parts.length != 8) {
+            throw new IllegalArgumentException("Usage: add <name> <price> <stock> <expiration> <discounted> <categoryId> <supplierId>");
         }
         String name = parts[1].replace("\"", "");
         double price = Double.parseDouble(parts[2]);
         int stock = Integer.parseInt(parts[3]);
         LocalDate expiration = LocalDate.parse(parts[4], DATE_FORMATTER);
-        Product product = new Product(0, name, price, stock, expiration, false); // New products not discounted
+        boolean discounted = Boolean.parseBoolean(parts[5]);
+        Integer categoryId = parts[6].equals("null") ? null : Integer.parseInt(parts[6]);
+        Integer supplierId = parts[7].equals("null") ? null : Integer.parseInt(parts[7]);
+        Product product = new Product(0, name, price, stock, expiration, discounted, categoryId, supplierId);
         productService.addProduct(product);
         System.out.println("Product added: " + product);
     }
 
-    private static void handleList(ProductService productService) {
-        List<Product> products = productService.getAllProducts();
-        if (products.isEmpty()) {
-            System.out.println("No products found.");
-        } else {
-            products.forEach(System.out::println);
-        }
-    }
-
     private static void handleUpdate(ProductService productService, String[] parts) {
-        if (parts.length != 6) {
-            throw new IllegalArgumentException("Usage: update <id> <name> <price> <stock> <expiration>");
+        if (parts.length != 9) {
+            throw new IllegalArgumentException("Usage: update <id> <name> <price> <stock> <expiration> <discounted> <categoryId> <supplierId>");
         }
         int id = Integer.parseInt(parts[1]);
-        String name = parts[2].replace("\"","");
+        String name = parts[2].replace("\"", "");
         double price = Double.parseDouble(parts[3]);
         int stock = Integer.parseInt(parts[4]);
         LocalDate expiration = LocalDate.parse(parts[5], DATE_FORMATTER);
-        Product existing = findProductById(productService, id);
-        Product product = new Product(id, name, price, stock, expiration, existing.discounted());
+        boolean discounted = Boolean.parseBoolean(parts[6]);
+        Integer categoryId = parts[7].equals("null") ? null : Integer.parseInt(parts[7]);
+        Integer supplierId = parts[8].equals("null") ? null : Integer.parseInt(parts[8]);
+        Product product = new Product(id, name, price, stock, expiration, discounted, categoryId, supplierId);
         productService.updateProduct(product);
         System.out.println("Product updated: " + product);
     }
@@ -136,52 +128,24 @@ public class Main {
         }
         int id = Integer.parseInt(parts[1]);
         productService.deleteProduct(id);
-        System.out.println("Product ID " + id + " deleted.");
+        System.out.println("Product deleted with ID: " + id);
     }
 
     private static void handleSearch(ProductService productService, String[] parts) {
-        if (parts.length < 3) {
-            throw new IllegalArgumentException("Usage: search name <name> | search expiring <date>");
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("Usage: search <name>");
         }
-        String type = parts[1].toLowerCase();
-        if ("name".equals(type)) {
-            String name = parts[2];
-            List<Product> results = productService.findProductsByName(name);
-            if (results.isEmpty()) {
-                System.out.println("No products found with name containing: " + name);
-            } else {
-                results.forEach(System.out::println);
-            }
-        } else if ("expiring".equals(type)) {
-            LocalDate date = LocalDate.parse(parts[2], DATE_FORMATTER);
-            List<Product> results = productService.findProductsExpiringBefore(date);
-            if (results.isEmpty()) {
-                System.out.println("No products expiring before: " + date);
-            } else {
-                results.forEach(System.out::println);
-            }
-        } else {
-            throw new IllegalArgumentException("Unknown search type: " + type);
-        }
+        String name = parts[1].replace("\"", "");
+        productService.findProductsByName(name).forEach(System.out::println);
     }
 
     private static void handleDiscount(ProductService productService, String[] parts) {
-        if (parts.length != 4) {
-            throw new IllegalArgumentException("Usage: discount <id> flat <amount> | discount <id> percent <percent>");
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("Usage: discount <id>");
         }
         int id = Integer.parseInt(parts[1]);
-        String type = parts[2].toLowerCase();
-        if ("flat".equals(type)) {
-            BigDecimal amount = new BigDecimal(parts[3]);
-            Product updatedProduct = productService.applyManualDiscount(id, new FlatDiscountStrategy(amount));
-            System.out.println("Flat discount of " + amount + " applied to ID " + id);
-        } else if ("percent".equals(type)) {
-            BigDecimal percent = new BigDecimal(parts[3]);
-            Product updatedProduct = productService.applyManualDiscount(id, new PercentageDiscountStrategy(percent));
-            System.out.println("Percentage discount of " + percent + "% applied to ID " + id);
-        } else {
-            throw new IllegalArgumentException("Unknown discount type: " + type);
-        }
+        productService.applyDiscount(id);
+        System.out.println("Discount applied to product ID: " + id);
     }
 
     private static void handleAdjust(ProductService productService, String[] parts) {
@@ -191,35 +155,53 @@ public class Main {
         int id = Integer.parseInt(parts[1]);
         int amount = Integer.parseInt(parts[2]);
         productService.adjustStock(id, amount);
-        System.out.println("Stock adjusted for ID " + id + " by " + amount);
+        System.out.println("Stock adjusted for product ID: " + id);
     }
 
-    private static void handleAutoDiscount(ProductService productService, String[] parts) {
-        if (parts.length == 1) {
-            int productsDiscounted = productService.applyDynamicDiscounts();
-            if (productsDiscounted > 0) {
-                System.out.println("Dynamic discounts applied to all eligible products.");
-            } else {
-                System.out.println("Dynamic discounts were not applied to any product.");
-            }
-        } else if (parts.length == 2) {
-            int id = Integer.parseInt(parts[1]);
-            Product before = findProductById(productService, id);
-            Product updatedProduct = productService.applyDynamicDiscount(id);
-            if (!before.discounted() && updatedProduct.discounted()) {
-                System.out.println("Dynamic discount applied to ID " + id + ": " + updatedProduct);
-            } else {
-                System.out.println("No dynamic discount applied to ID " + id + ": " + updatedProduct);
-            }
-        } else {
-            throw new IllegalArgumentException("Usage: auto-discount [id]");
+    private static void handleAddCategory(ProductService productService, String[] parts) {
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("Usage: add-category <name>");
         }
+        String name = parts[1].replace("\"", "");
+        int id = productService.addCategory(name);
+        System.out.println("Category added with ID: " + id);
     }
 
-    private static Product findProductById(ProductService productService, int id) {
-        return productService.getAllProducts().stream()
-                .filter(p -> p.id() == id)
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("No product found with ID: " + id));
+    private static void handleAddSupplier(ProductService productService, String[] parts) {
+        if (parts.length < 2 || parts.length > 3) {
+            throw new IllegalArgumentException("Usage: add-supplier <name> [<contactInfo>]");
+        }
+        String name = parts[1].replace("\"", "");
+        String contactInfo = parts.length == 3 ? parts[2].replace("\"", "") : null;
+        int id = productService.addSupplier(name, contactInfo);
+        System.out.println("Supplier added with ID: " + id);
+    }
+
+    private static void handleHelp() {
+        System.out.println("Available commands:");
+        System.out.println("  add <name> <price> <stock> <expiration> <discounted> <categoryId> <supplierId>");
+        System.out.println("    - Add a new product (e.g., add \"Milk\" 5.0 100 2025-04-28 false 1 1)");
+        System.out.println("  list");
+        System.out.println("    - List all products");
+        System.out.println("  update <id> <name> <price> <stock> <expiration> <discounted> <categoryId> <supplierId>");
+        System.out.println("    - Update a product (e.g., update 1 \"Milk\" 4.5 90 2025-04-28 true 1 1)");
+        System.out.println("  delete <id>");
+        System.out.println("    - Delete a product by ID");
+        System.out.println("  search <name>");
+        System.out.println("    - Search products by name (e.g., search \"Milk\")");
+        System.out.println("  discount <id>");
+        System.out.println("    - Apply a discount to a product by ID");
+        System.out.println("  adjust <id> <amount>");
+        System.out.println("    - Adjust stock for a product (e.g., adjust 1 -10)");
+        System.out.println("  auto-discount");
+        System.out.println("    - Clear stock for expired products");
+        System.out.println("  add-category <name>");
+        System.out.println("    - Add a new category (e.g., add-category \"Dairy\")");
+        System.out.println("  add-supplier <name> [<contactInfo>]");
+        System.out.println("    - Add a new supplier (e.g., add-supplier \"FarmFresh\" \"555-1234\")");
+        System.out.println("  help");
+        System.out.println("    - Show this help message");
+        System.out.println("  exit");
+        System.out.println("    - Exit the application");
     }
 }

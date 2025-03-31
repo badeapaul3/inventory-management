@@ -51,7 +51,7 @@ public class ProductValidator {
                     validateString(fieldName, (String) value, annotation);
                 } else if (field.getType().equals(Double.TYPE)) {
                     validateDouble(fieldName, (Double) value, annotation);
-                } else if (field.getType().equals(Integer.TYPE)) {
+                } else if (field.getType().equals(Integer.TYPE) || field.getType().equals(Integer.class)) {
                     validateInt(fieldName, (Integer) value, annotation);
                 } else if (field.getType().equals(LocalDate.class)) {
                     validateLocalDate(fieldName, (LocalDate) value, annotation);

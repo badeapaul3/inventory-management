@@ -12,4 +12,10 @@ public record Product(@ValidateProduct(notNull = false, minValue = -1) int id,
                       @ValidateProduct(minValue = 0.01) double price,
                       @ValidateProduct(minValue = 0) int stock,
                       @ValidateProduct(allowPastDate = false) LocalDate expirationDate ,
-                      @ValidateProduct(notNull = true) boolean discounted){ }
+                      @ValidateProduct(notNull = true) boolean discounted,
+
+                      @ValidateProduct(notNull = false, minValue = 1) Integer categoryId,
+
+                      @ValidateProduct(notNull = false, minValue = 1) Integer supplierId
+
+){ }
