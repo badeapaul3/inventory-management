@@ -2,11 +2,11 @@ package com.inventory.main;
 
 import com.inventory.dao.ProductDAO;
 import com.inventory.database.DatabaseInitializer;
-import com.inventory.discount.DiscountManager;
-import com.inventory.discount.DiscountService;
 import com.inventory.discount.FlatDiscountStrategy;
 import com.inventory.discount.PercentageDiscountStrategy;
 import com.inventory.model.Product;
+import com.inventory.service.ProductService;
+import com.inventory.service.ProductServiceImpl;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -22,8 +22,7 @@ public class Main {
         DatabaseInitializer.initializeDatabase();
         try (ProductDAO productDAO = new ProductDAO();
              Scanner scanner = new Scanner(System.in)) {
-            DiscountService discountService = new DiscountService(productDAO);
-            DiscountManager discountManager = new DiscountManager(productDAO);
+            ProductService productService = new ProductServiceImpl(productDAO);
             System.out.println("Inventory Management CLI - Enter 'help' for commands.");
 
             while (true) {
@@ -43,28 +42,28 @@ public class Main {
                             System.out.println("Exiting...");
                             return;
                         case "add":
-                            handleAdd(productDAO, parts);
+                            handleAdd(productService, parts);
                             break;
                         case "list":
-                            handleList(productDAO);
+                            handleList(productService);
                             break;
                         case "update":
-                            handleUpdate(productDAO, parts);
+                            handleUpdate(productService, parts);
                             break;
                         case "delete":
-                            handleDelete(productDAO, parts);
+                            handleDelete(productService, parts);
                             break;
                         case "search":
-                            handleSearch(productDAO, parts);
+                            handleSearch(productService, parts);
                             break;
                         case "discount":
-                            handleDiscount(discountService, productDAO, parts);
+                            handleDiscount(productService, parts);
                             break;
                         case "adjust":
-                            handleAdjust(productDAO, parts);
+                            handleAdjust(productService, parts);
                             break;
                         case "auto-discount":
-                            handleAutoDiscount(discountManager, productDAO ,parts);
+                            handleAutoDiscount(productService, parts);
                             break;
                         default:
                             System.out.println("Unknown command: " + command + ". Type 'help' for options.");
@@ -80,35 +79,35 @@ public class Main {
 
     private static void printHelp() {
         System.out.println("Commands:");
-        System.out.println("  add <name> <price> <stock> <expiration>  - Add a product (e.g., add Milk 5.0 100 2025-12-31)");
-        System.out.println("  list                             - List all products");
-        System.out.println("  update <id> <name> <price> <stock> <expiration> - Update a product");
-        System.out.println("  delete <id>                      - Delete a product by ID");
-        System.out.println("  search name <name>               - Search products by name");
-        System.out.println("  search expiring <date>           - Search products expiring before date (yyyy-MM-dd)");
-        System.out.println("  discount <id> flat <amount>      - Apply flat discount to product");
-        System.out.println("  discount <id> percent <percent>  - Apply percentage discount to product");
-        System.out.println("  adjust <id> <amount>             - Adjust stock (positive to add, negative to subtract)");
-        System.out.println("  auto-discount [id]               - Apply dynamic discounts (all products or specific ID)");
-        System.out.println("  help                             - Show this help");
-        System.out.println("  exit                             - Exit the app");
+        System.out.println("  add <name> <price> <stock> <expiration>          - Add a product (e.g., add Milk 5.0 100 2025-12-31)");
+        System.out.println("  list                                             - List all products");
+        System.out.println("  update <id> <name> <price> <stock> <expiration>  - Update a product");
+        System.out.println("  delete <id>                                      - Delete a product by ID");
+        System.out.println("  search name <name>                               - Search products by name");
+        System.out.println("  search expiring <date>                           - Search products expiring before date (yyyy-MM-dd)");
+        System.out.println("  discount <id> flat <amount>                      - Apply flat discount to product");
+        System.out.println("  discount <id> percent <percent>                  - Apply percentage discount to product");
+        System.out.println("  adjust <id> <amount>                             - Adjust stock (positive to add, negative to subtract)");
+        System.out.println("  auto-discount [id]                               - Apply dynamic discounts (all products or specific ID)");
+        System.out.println("  help                                             - Show this help");
+        System.out.println("  exit                                             - Exit the app");
     }
 
-    private static void handleAdd(ProductDAO productDAO, String[] parts) {
+    private static void handleAdd(ProductService productService, String[] parts) {
         if (parts.length != 5) {
             throw new IllegalArgumentException("Usage: add <name> <price> <stock> <expiration>");
         }
-        String name = parts[1];
+        String name = parts[1].replace("\"", "");
         double price = Double.parseDouble(parts[2]);
         int stock = Integer.parseInt(parts[3]);
         LocalDate expiration = LocalDate.parse(parts[4], DATE_FORMATTER);
         Product product = new Product(0, name, price, stock, expiration, false); // New products not discounted
-        productDAO.insertOrUpdateProduct(product);
+        productService.addProduct(product);
         System.out.println("Product added: " + product);
     }
 
-    private static void handleList(ProductDAO productDAO) {
-        List<Product> products = productDAO.getAllProducts(false);
+    private static void handleList(ProductService productService) {
+        List<Product> products = productService.getAllProducts();
         if (products.isEmpty()) {
             System.out.println("No products found.");
         } else {
@@ -116,39 +115,38 @@ public class Main {
         }
     }
 
-    private static void handleUpdate(ProductDAO productDAO, String[] parts) {
+    private static void handleUpdate(ProductService productService, String[] parts) {
         if (parts.length != 6) {
             throw new IllegalArgumentException("Usage: update <id> <name> <price> <stock> <expiration>");
         }
         int id = Integer.parseInt(parts[1]);
-        String name = parts[2];
+        String name = parts[2].replace("\"","");
         double price = Double.parseDouble(parts[3]);
         int stock = Integer.parseInt(parts[4]);
         LocalDate expiration = LocalDate.parse(parts[5], DATE_FORMATTER);
-        // Preserve discounted status from existing product
-        Product existing = findProductById(productDAO, id);
+        Product existing = findProductById(productService, id);
         Product product = new Product(id, name, price, stock, expiration, existing.discounted());
-        productDAO.updateProduct(product);
+        productService.updateProduct(product);
         System.out.println("Product updated: " + product);
     }
 
-    private static void handleDelete(ProductDAO productDAO, String[] parts) {
+    private static void handleDelete(ProductService productService, String[] parts) {
         if (parts.length != 2) {
             throw new IllegalArgumentException("Usage: delete <id>");
         }
         int id = Integer.parseInt(parts[1]);
-        productDAO.deleteProduct(id);
+        productService.deleteProduct(id);
         System.out.println("Product ID " + id + " deleted.");
     }
 
-    private static void handleSearch(ProductDAO productDAO, String[] parts) {
+    private static void handleSearch(ProductService productService, String[] parts) {
         if (parts.length < 3) {
             throw new IllegalArgumentException("Usage: search name <name> | search expiring <date>");
         }
         String type = parts[1].toLowerCase();
         if ("name".equals(type)) {
             String name = parts[2];
-            List<Product> results = productDAO.findProductsByName(name);
+            List<Product> results = productService.findProductsByName(name);
             if (results.isEmpty()) {
                 System.out.println("No products found with name containing: " + name);
             } else {
@@ -156,7 +154,7 @@ public class Main {
             }
         } else if ("expiring".equals(type)) {
             LocalDate date = LocalDate.parse(parts[2], DATE_FORMATTER);
-            List<Product> results = productDAO.findProductsExpiringBefore(date);
+            List<Product> results = productService.findProductsExpiringBefore(date);
             if (results.isEmpty()) {
                 System.out.println("No products expiring before: " + date);
             } else {
@@ -167,48 +165,48 @@ public class Main {
         }
     }
 
-    private static void handleDiscount(DiscountService discountService, ProductDAO productDAO, String[] parts) {
+    private static void handleDiscount(ProductService productService, String[] parts) {
         if (parts.length != 4) {
             throw new IllegalArgumentException("Usage: discount <id> flat <amount> | discount <id> percent <percent>");
         }
         int id = Integer.parseInt(parts[1]);
         String type = parts[2].toLowerCase();
-        Product product = findProductById(productDAO, id);
         if ("flat".equals(type)) {
             BigDecimal amount = new BigDecimal(parts[3]);
-            discountService.applyAndSaveDiscount(product, new FlatDiscountStrategy(amount));
+            Product updatedProduct = productService.applyManualDiscount(id, new FlatDiscountStrategy(amount));
             System.out.println("Flat discount of " + amount + " applied to ID " + id);
         } else if ("percent".equals(type)) {
             BigDecimal percent = new BigDecimal(parts[3]);
-            discountService.applyAndSaveDiscount(product, new PercentageDiscountStrategy(percent));
+            Product updatedProduct = productService.applyManualDiscount(id, new PercentageDiscountStrategy(percent));
             System.out.println("Percentage discount of " + percent + "% applied to ID " + id);
         } else {
             throw new IllegalArgumentException("Unknown discount type: " + type);
         }
     }
 
-    private static void handleAdjust(ProductDAO productDAO, String[] parts) {
+    private static void handleAdjust(ProductService productService, String[] parts) {
         if (parts.length != 3) {
             throw new IllegalArgumentException("Usage: adjust <id> <amount>");
         }
         int id = Integer.parseInt(parts[1]);
         int amount = Integer.parseInt(parts[2]);
-        productDAO.adjustStock(id, amount);
+        productService.adjustStock(id, amount);
         System.out.println("Stock adjusted for ID " + id + " by " + amount);
     }
 
-    private static void handleAutoDiscount(DiscountManager discountManager, ProductDAO productDAO, String[] parts) {
+    private static void handleAutoDiscount(ProductService productService, String[] parts) {
         if (parts.length == 1) {
-            int productsDiscounted = discountManager.applyDynamicDiscounts();
-            if(productsDiscounted > 0) System.out.println("Dynamic discounts applied to all eligible products.");
-                else System.out.println("Dynamic discounts were not applied to any product.");
+            int productsDiscounted = productService.applyDynamicDiscounts();
+            if (productsDiscounted > 0) {
+                System.out.println("Dynamic discounts applied to all eligible products.");
+            } else {
+                System.out.println("Dynamic discounts were not applied to any product.");
+            }
         } else if (parts.length == 2) {
-
             int id = Integer.parseInt(parts[1]);
-            Product before = findProductById(productDAO, id);
-            Product updatedProduct = discountManager.applyDynamicDiscount(id);
-
-            if(!before.discounted() && updatedProduct.discounted()){
+            Product before = findProductById(productService, id);
+            Product updatedProduct = productService.applyDynamicDiscount(id);
+            if (!before.discounted() && updatedProduct.discounted()) {
                 System.out.println("Dynamic discount applied to ID " + id + ": " + updatedProduct);
             } else {
                 System.out.println("No dynamic discount applied to ID " + id + ": " + updatedProduct);
@@ -218,9 +216,8 @@ public class Main {
         }
     }
 
-    private static Product findProductById(ProductDAO productDAO, int id) {
-        List<Product> products = productDAO.getAllProducts(false);
-        return products.stream()
+    private static Product findProductById(ProductService productService, int id) {
+        return productService.getAllProducts().stream()
                 .filter(p -> p.id() == id)
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("No product found with ID: " + id));

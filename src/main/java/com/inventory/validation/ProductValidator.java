@@ -13,56 +13,80 @@ public class ProductValidator {
 
     /**
      * Validates the product based on the @ValidateProduct annotation.
+     * @param product the product to validate
+     * @throws IllegalArgumentException if validation fails for non-date fields
+     * @throws ExpiredProductException if the expiration date is in the past and not allowed
      */
     public static void validateProduct(Product product) {
+        if (product == null) {
+            throw new IllegalArgumentException("Product cannot be null.");
+        }
 
-        if(product == null) throw new IllegalArgumentException("Product cannot be null.");
+        Field[] fields = Product.class.getDeclaredFields();
+        if (fields.length == 0) {
+            throw new IllegalStateException("No fields found in Product class for validation.");
+        }
 
-        // Using reflection to scan the fields of the Product class
-        for (Field field : Product.class.getDeclaredFields()) {
-            if (field.isAnnotationPresent(ValidateProduct.class)) {
-                field.setAccessible(true);
-                ValidateProduct annotation = field.getAnnotation(ValidateProduct.class);
-                try {
-                    Object value = field.get(product);
+        for (Field field : fields) {
+            if (!field.isAnnotationPresent(ValidateProduct.class)) {
+                continue;
+            }
 
-                    if(annotation.notNull() && value == null) throw new IllegalArgumentException(field.getName() + " cannot be null");
+            field.setAccessible(true);
+            ValidateProduct annotation = field.getAnnotation(ValidateProduct.class);
+            String fieldName = field.getName();
 
-                    if(value == null) continue;
+            try {
+                Object value = field.get(product);
 
-                    // Example validation logic for specific fields
-                    if (field.getType().equals(String.class)) {
-                        validateString(field.getName(), (String) value, annotation);
-                    } else if (field.getType().equals(double.class)) {
-                        validateDouble(field.getName(), (Double) value, annotation);
-                    } else if (field.getType().equals(int.class)) {
-                        validateInt(field.getName(), (Integer) value, annotation);
-                    } else if (field.getType().equals(LocalDate.class)) {
-                        validateLocalDate(field.getName(), (LocalDate) value, annotation);
-                    }
-                    // Add other field validations as necessary
-
-                } catch (IllegalAccessException e) {
-                    throw new RuntimeException("Failed to validate product field: " + field.getName(), e);
+                if (annotation.notNull() && value == null) {
+                    throw new IllegalArgumentException(fieldName + " cannot be null");
                 }
+
+                if (value == null) {
+                    continue;
+                }
+
+                if (field.getType().equals(String.class)) {
+                    validateString(fieldName, (String) value, annotation);
+                } else if (field.getType().equals(Double.TYPE)) {
+                    validateDouble(fieldName, (Double) value, annotation);
+                } else if (field.getType().equals(Integer.TYPE)) {
+                    validateInt(fieldName, (Integer) value, annotation);
+                } else if (field.getType().equals(LocalDate.class)) {
+                    validateLocalDate(fieldName, (LocalDate) value, annotation);
+                } else if (field.getType().equals(Boolean.TYPE)) {
+                    // No validation needed beyond notNull
+                } else {
+                    throw new IllegalStateException("Unsupported field type for validation: " + field.getType());
+                }
+            } catch (IllegalAccessException e) {
+                throw new RuntimeException("Failed to validate product field: " + fieldName, e);
             }
         }
     }
 
-
-    private static void validateString(String fieldName, String value, ValidateProduct annotation){
-        if(annotation.notEmpty() && value.trim().isEmpty()) throw new IllegalArgumentException(fieldName + " cannot be empty.");
+    private static void validateString(String fieldName, String value, ValidateProduct annotation) {
+        if (annotation.notEmpty() && value.trim().isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " cannot be empty or whitespace only.");
+        }
     }
 
-    private static void validateDouble(String fieldName, Double value, ValidateProduct annotation){
-        if(value < annotation.minValue()) throw new IllegalArgumentException(fieldName + " must be at least " + annotation.minValue());
-    }
-    private static void validateInt(String fieldName, Integer value, ValidateProduct annotation){
-        if(value < annotation.minValue()) throw new IllegalArgumentException(fieldName + " must be at least " + annotation.minValue());
-    }
-    private static void validateLocalDate(String fieldName, LocalDate value, ValidateProduct annotation){
-        if(value.isBefore(LocalDate.now()) && !annotation.allowPastDate()) throw new ExpiredProductException(fieldName + " cannot be in the past.");
+    private static void validateDouble(String fieldName, Double value, ValidateProduct annotation) {
+        if (value < annotation.minValue()) {
+            throw new IllegalArgumentException(fieldName + " must be at least " + annotation.minValue());
+        }
     }
 
+    private static void validateInt(String fieldName, Integer value, ValidateProduct annotation) {
+        if (value < annotation.minValue()) {
+            throw new IllegalArgumentException(fieldName + " must be at least " + annotation.minValue());
+        }
+    }
 
+    private static void validateLocalDate(String fieldName, LocalDate value, ValidateProduct annotation) {
+        if (!annotation.allowPastDate() && value.isBefore(LocalDate.now())) {
+            throw new ExpiredProductException(fieldName + " cannot be in the past: " + value);
+        }
+    }
 }

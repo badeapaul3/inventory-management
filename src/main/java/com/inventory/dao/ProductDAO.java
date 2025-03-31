@@ -66,9 +66,11 @@ public class ProductDAO implements AutoCloseable {
                     }
                 }
             }
-        } catch (SQLException e) {
+        }catch (SQLException e) {
             throw new RuntimeException("Error inserting or updating product", e);
-        } finally {
+        }catch (IllegalArgumentException | ExpiredProductException e){
+            throw e;
+        }finally {
             lock.unlock();
         }
     }
@@ -133,6 +135,8 @@ public class ProductDAO implements AutoCloseable {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Error updating product", e);
+        } catch (IllegalArgumentException | ExpiredProductException e) {
+            throw e;
         } finally {
             lock.unlock();
         }
