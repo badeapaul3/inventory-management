@@ -4,8 +4,10 @@ import com.inventory.dao.CategoryDAO;
 import com.inventory.dao.HistoryDAO;
 import com.inventory.dao.ProductDAO;
 import com.inventory.dao.SupplierDAO;
+import com.inventory.exception.ProductNotFoundException;
 import com.inventory.model.Product;
 
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -41,15 +43,26 @@ public class ProductServiceImpl implements ProductService {
         if (product == null) {
             throw new IllegalArgumentException("Product cannot be null");
         }
-        productDAO.updateProduct(product);
+        try {
+            productDAO.updateProduct(product);
+        } catch (SQLException e) {
+            if (e.getMessage().contains("No product found")) {
+                throw new ProductNotFoundException("Product with ID " + product.id() + " not found");
+            }
+            throw new RuntimeException("Database error updating product", e);
+        }
     }
 
     @Override
     public void deleteProduct(int id) {
-        if (id <= 0) {
-            throw new IllegalArgumentException("Invalid product ID: " + id);
+        try {
+            productDAO.deleteProduct(id);
+        } catch (SQLException e) {
+            if (e.getMessage().contains("No product found")) {
+                throw new ProductNotFoundException("Product with ID " + id + " not found");
+            }
+            throw new RuntimeException("Database error deleting product", e);
         }
-        productDAO.deleteProduct(id);
     }
 
     @Override
@@ -94,7 +107,14 @@ public class ProductServiceImpl implements ProductService {
                     product.id(), product.name(), product.price() * 0.9, product.stock(),
                     product.expirationDate(), true, product.categoryId(), product.supplierId()
             );
-            productDAO.updateProduct(updatedProduct);
+            try {
+                productDAO.updateProduct(updatedProduct);
+            } catch (SQLException e) {
+                if (e.getMessage().contains("No product found")) {
+                    throw new ProductNotFoundException("Product with ID " + product.id() + " not found");
+                }
+                throw new RuntimeException("Database error updating product", e);
+            }
         }
     }
 

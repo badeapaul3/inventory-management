@@ -52,7 +52,7 @@ public class ProductValidator {
                 } else if (field.getType().equals(Double.TYPE)) {
                     validateDouble(fieldName, (Double) value, annotation);
                 } else if (field.getType().equals(Integer.TYPE) || field.getType().equals(Integer.class)) {
-                    validateInt(fieldName, (Integer) value, annotation);
+                    validateInteger(fieldName, (Integer) value, annotation);
                 } else if (field.getType().equals(LocalDate.class)) {
                     validateLocalDate(fieldName, (LocalDate) value, annotation);
                 } else if (field.getType().equals(Boolean.TYPE)) {
@@ -78,9 +78,10 @@ public class ProductValidator {
         }
     }
 
-    private static void validateInt(String fieldName, Integer value, ValidateProduct annotation) {
-        if (value < annotation.minValue()) {
-            throw new IllegalArgumentException(fieldName + " must be at least " + annotation.minValue());
+    private static void validateInteger(String fieldName, Object value, ValidateProduct annotation) {
+        Integer intValue = (Integer) value;
+        if (intValue != null && intValue < annotation.minValue()) {
+            throw new IllegalArgumentException(fieldName + " must be at least " + (int) annotation.minValue());
         }
     }
 

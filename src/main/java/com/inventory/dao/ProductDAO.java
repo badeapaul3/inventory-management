@@ -108,7 +108,7 @@ public class ProductDAO implements AutoCloseable {
         return products;
     }
 
-    public void updateProduct(Product product) {
+    public void updateProduct(Product product) throws SQLException {
         lock.lock();
         try {
             ProductValidator.validateProduct(product);
@@ -144,8 +144,6 @@ public class ProductDAO implements AutoCloseable {
                     }
                 }
             }
-        } catch (SQLException e) {
-            throw new RuntimeException("Error updating product", e);
         } catch (IllegalArgumentException | ExpiredProductException e) {
             throw e;
         } finally {
@@ -153,7 +151,7 @@ public class ProductDAO implements AutoCloseable {
         }
     }
 
-    public void deleteProduct(int id) {
+    public void deleteProduct(int id) throws SQLException {
         lock.lock();
         try {
             if (id <= 0) {
@@ -164,12 +162,10 @@ public class ProductDAO implements AutoCloseable {
                 stmt.setInt(1, id);
                 int rowsAffected = stmt.executeUpdate();
                 if (rowsAffected == 0) {
-                    throw new SQLException("No product found with ID: " + id);
+                    throw new SQLException("No product found with ID: " + id); // Stays as-is
                 }
                 historyDAO.logProductHistory(id, "DELETE", null, null);
             }
-        } catch (SQLException e) {
-            throw new RuntimeException("Error deleting product", e);
         } finally {
             lock.unlock();
         }

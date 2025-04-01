@@ -2,9 +2,12 @@ package com.inventory.discount;
 
 import com.inventory.dao.ProductDAO;
 import com.inventory.model.Product;
+import com.inventory.exception.ProductNotFoundException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+
+import java.sql.SQLException;
 
 public class DiscountService {
     private final ProductDAO productDAO;
@@ -45,6 +48,14 @@ public class DiscountService {
         }
 
         Product discountedProduct = applyDiscount(product, strategy);
-        productDAO.updateProduct(discountedProduct);
+
+        try {
+            productDAO.updateProduct(discountedProduct);
+        } catch (SQLException e) {
+            if (e.getMessage().contains("No product found")) {
+                throw new ProductNotFoundException("Product with ID " + product.id() + " not found");
+            }
+            throw new RuntimeException("Database error updating product", e);
+        }
     }
 }
