@@ -9,6 +9,8 @@ import com.inventory.database.DatabaseManager;
 import com.inventory.service.ProductService;
 import com.inventory.service.ProductServiceImpl;
 import com.inventory.model.Product;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -17,9 +19,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.Scanner;
 
 public class Main {
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     public static void main(String[] args) {
+        logger.info("Starting with args: {}", String.join(" ", args));
         DatabaseInitializer.initializeDatabase();
 
         try (Connection connection = DatabaseManager.getInstance().getConnection();
@@ -31,10 +35,12 @@ public class Main {
 
             ProductService productService = new ProductServiceImpl(productDAO, categoryDAO, supplierDAO, historyDAO);
 
+            logger.info("Inventory application started.");
             while (true) {
-                System.out.print("> ");
+                System.out.print("> "); // Keep console prompt
                 String input = scanner.nextLine().trim();
                 if (input.equalsIgnoreCase("exit")) {
+                    logger.info("Application exiting.");
                     break;
                 }
 
@@ -47,7 +53,10 @@ public class Main {
                             handleAdd(productService, parts);
                             break;
                         case "list":
-                            productService.getAllProducts().forEach(System.out::println);
+                            productService.getAllProducts().forEach(product -> {
+                                System.out.println(product); // Keep console output
+                                logger.debug("Listed product: {}", product);
+                            });
                             break;
                         case "update":
                             handleUpdate(productService, parts);
@@ -66,7 +75,8 @@ public class Main {
                             break;
                         case "auto-discount":
                             productService.adjustStockForExpired();
-                            System.out.println("Expired stock adjusted.");
+                            logger.info("Expired stock adjusted.");
+                            System.out.println("Expired stock adjusted."); // Keep console output
                             break;
                         case "add-category":
                             handleAddCategory(productService, parts);
@@ -78,14 +88,17 @@ public class Main {
                             handleHelp();
                             break;
                         default:
+                            logger.warn("Unknown command: {}", command);
                             System.out.println("Unknown command: " + command + ". Type 'help' for available commands.");
                     }
                 } catch (Exception e) {
-                    System.out.println("Error: " + e.getMessage());
+                    logger.error("Command error: {}", e.getMessage(), e);
+                    System.out.println("Error: " + e.getMessage()); // Keep console feedback
                 }
             }
         } catch (SQLException e) {
-            System.err.println("Application error: " + e.getMessage());
+            logger.error("Application startup error: {}", e.getMessage(), e);
+            System.err.println("Application error: " + e.getMessage()); // Keep for now
         }
     }
 
@@ -102,7 +115,8 @@ public class Main {
         Integer supplierId = parts[7].equals("null") ? null : Integer.parseInt(parts[7]);
         Product product = new Product(0, name, price, stock, expiration, discounted, categoryId, supplierId);
         productService.addProduct(product);
-        System.out.println("Product added: " + product);
+        logger.info("Product added: {}", product);
+        System.out.println("Product added: " + product); // Keep console output
     }
 
     private static void handleUpdate(ProductService productService, String[] parts) {
@@ -119,7 +133,8 @@ public class Main {
         Integer supplierId = parts[8].equals("null") ? null : Integer.parseInt(parts[8]);
         Product product = new Product(id, name, price, stock, expiration, discounted, categoryId, supplierId);
         productService.updateProduct(product);
-        System.out.println("Product updated: " + product);
+        logger.info("Product updated: {}", product);
+        System.out.println("Product updated: " + product); // Keep console output
     }
 
     private static void handleDelete(ProductService productService, String[] parts) {
@@ -128,7 +143,8 @@ public class Main {
         }
         int id = Integer.parseInt(parts[1]);
         productService.deleteProduct(id);
-        System.out.println("Product deleted with ID: " + id);
+        logger.info("Product deleted with ID: {}", id);
+        System.out.println("Product deleted with ID: " + id); // Keep console output
     }
 
     private static void handleSearch(ProductService productService, String[] parts) {
@@ -136,7 +152,11 @@ public class Main {
             throw new IllegalArgumentException("Usage: search <name>");
         }
         String name = parts[1].replace("\"", "");
-        productService.findProductsByName(name).forEach(System.out::println);
+        logger.debug("Searching for products with name: {}", name);
+        productService.findProductsByName(name).forEach(product -> {
+            System.out.println(product); // Keep console output
+            logger.debug("Search result: {}", product);
+        });
     }
 
     private static void handleDiscount(ProductService productService, String[] parts) {
@@ -145,7 +165,8 @@ public class Main {
         }
         int id = Integer.parseInt(parts[1]);
         productService.applyDiscount(id);
-        System.out.println("Discount applied to product ID: " + id);
+        logger.info("Discount applied to product ID: {}", id);
+        System.out.println("Discount applied to product ID: " + id); // Keep console output
     }
 
     private static void handleAdjust(ProductService productService, String[] parts) {
@@ -155,7 +176,8 @@ public class Main {
         int id = Integer.parseInt(parts[1]);
         int amount = Integer.parseInt(parts[2]);
         productService.adjustStock(id, amount);
-        System.out.println("Stock adjusted for product ID: " + id);
+        logger.info("Stock adjusted for product ID: {} by amount: {}", id, amount);
+        System.out.println("Stock adjusted for product ID: " + id); // Keep console output
     }
 
     private static void handleAddCategory(ProductService productService, String[] parts) {
@@ -164,7 +186,8 @@ public class Main {
         }
         String name = parts[1].replace("\"", "");
         int id = productService.addCategory(name);
-        System.out.println("Category added with ID: " + id);
+        logger.info("Category added with ID: {}, name: {}", id, name);
+        System.out.println("Category added with ID: " + id); // Keep console output
     }
 
     private static void handleAddSupplier(ProductService productService, String[] parts) {
@@ -174,10 +197,12 @@ public class Main {
         String name = parts[1].replace("\"", "");
         String contactInfo = parts.length == 3 ? parts[2].replace("\"", "") : null;
         int id = productService.addSupplier(name, contactInfo);
-        System.out.println("Supplier added with ID: " + id);
+        logger.info("Supplier added with ID: {}, name: {}, contactInfo: {}", id, name, contactInfo);
+        System.out.println("Supplier added with ID: " + id); // Keep console output
     }
 
     private static void handleHelp() {
+        logger.debug("Displaying help message.");
         System.out.println("Available commands:");
         System.out.println("  add <name> <price> <stock> <expiration> <discounted> <categoryId> <supplierId>");
         System.out.println("    - Add a new product (e.g., add \"Milk\" 5.0 100 2025-04-28 false 1 1)");

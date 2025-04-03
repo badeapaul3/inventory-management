@@ -1,15 +1,18 @@
 package com.inventory.database;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 
 public class DatabaseInitializer {
+    private static final Logger logger = LoggerFactory.getLogger(DatabaseInitializer.class);
+
     public static void initializeDatabase() {
         try (Connection conn = DatabaseManager.getInstance().getConnection();
              Statement stmt = conn.createStatement()) {
-
-            // Create Product table (unchanged from your version)
             String createProductSQL = """
                 CREATE TABLE IF NOT EXISTS Product (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,7 +25,6 @@ public class DatabaseInitializer {
             """;
             stmt.execute(createProductSQL);
 
-            // Create Category table
             String createCategorySQL = """
                 CREATE TABLE IF NOT EXISTS Category (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +33,6 @@ public class DatabaseInitializer {
             """;
             stmt.execute(createCategorySQL);
 
-            // Create Supplier table
             String createSupplierSQL = """
                 CREATE TABLE IF NOT EXISTS Supplier (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +42,6 @@ public class DatabaseInitializer {
             """;
             stmt.execute(createSupplierSQL);
 
-            // Create ProductHistory table
             String createHistorySQL = """
                 CREATE TABLE IF NOT EXISTS ProductHistory (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,9 +54,9 @@ public class DatabaseInitializer {
             """;
             stmt.execute(createHistorySQL);
 
-            System.out.println("✅ Database initialized successfully!");
+            logger.info("Database initialized successfully!");
         } catch (SQLException e) {
-            System.err.println("❌ Failed to initialize database: " + e.getMessage());
+            logger.error("Failed to initialize database: {}", e.getMessage(), e);
         }
     }
 }

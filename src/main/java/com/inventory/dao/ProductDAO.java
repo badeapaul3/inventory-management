@@ -3,6 +3,8 @@ package com.inventory.dao;
 import com.inventory.exception.ExpiredProductException;
 import com.inventory.model.Product;
 import com.inventory.validation.ProductValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.time.LocalDate;
@@ -11,6 +13,7 @@ import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class ProductDAO implements AutoCloseable {
+    private static final Logger logger = LoggerFactory.getLogger(ProductDAO.class);
     private final ReentrantLock lock = new ReentrantLock();
     private final Connection connection;
     private final HistoryDAO historyDAO;
@@ -24,6 +27,7 @@ public class ProductDAO implements AutoCloseable {
         lock.lock();
         try {
             ProductValidator.validateProduct(product);
+            logger.debug("Inserting or updating product: {}", product);
 
             String checkQuery = "SELECT id, stock FROM Product WHERE name = ? AND price = ? AND expiration_date = ?";
             String insertQuery = "INSERT INTO Product (name, price, stock, expiration_date, discounted, category_id, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
@@ -46,6 +50,7 @@ public class ProductDAO implements AutoCloseable {
                         updateStmt.setInt(5, existingId);
                         updateStmt.executeUpdate();
                         historyDAO.logProductHistory(existingId, "UPDATE", "stock: " + oldStock, "stock: " + (oldStock + product.stock()));
+                        logger.info("Updated product ID: {}, new stock: {}", existingId, oldStock + product.stock());
                     }
                 } else {
                     try (PreparedStatement insertStmt = connection.prepareStatement(insertQuery, Statement.RETURN_GENERATED_KEYS)) {
@@ -62,13 +67,16 @@ public class ProductDAO implements AutoCloseable {
                         if (generatedKeys.next()) {
                             int newId = generatedKeys.getInt(1);
                             historyDAO.logProductHistory(newId, "ADD", null, "price: " + product.price() + ", stock: " + product.stock());
+                            logger.info("Inserted new product ID: {}", newId);
                         }
                     }
                 }
             }
         } catch (SQLException e) {
+            logger.error("Error inserting or updating product: {}", e.getMessage(), e);
             throw new RuntimeException("Error inserting or updating product", e);
         } catch (IllegalArgumentException | ExpiredProductException e) {
+            logger.warn("Validation failed for product: {}", e.getMessage());
             throw e;
         } finally {
             lock.unlock();
@@ -82,6 +90,7 @@ public class ProductDAO implements AutoCloseable {
         lock.lock();
         try (PreparedStatement stmt = connection.prepareStatement(query);
              ResultSet rs = stmt.executeQuery()) {
+            logger.debug("Retrieving all products, throwOnExpired: {}", throwOnExpired);
             while (rs.next()) {
                 LocalDate expirationDate = LocalDate.parse(rs.getString("expiration_date"));
                 Product product = new Product(
@@ -96,11 +105,14 @@ public class ProductDAO implements AutoCloseable {
                 );
 
                 if (throwOnExpired && expirationDate.isBefore(LocalDate.now())) {
+                    logger.warn("Expired product found: {}", product);
                     throw new ExpiredProductException("Product '" + product.name() + "' is expired (expiration: " + expirationDate + ").");
                 }
                 products.add(product);
             }
+            logger.info("Retrieved {} products.", products.size());
         } catch (SQLException e) {
+            logger.error("Error retrieving products: {}", e.getMessage(), e);
             throw new RuntimeException("Error retrieving products", e);
         } finally {
             lock.unlock();
@@ -113,6 +125,7 @@ public class ProductDAO implements AutoCloseable {
         try {
             ProductValidator.validateProduct(product);
             if (product.id() <= 0) {
+                logger.warn("Invalid product ID for update: {}", product.id());
                 throw new IllegalArgumentException("Cannot update product with invalid ID: " + product.id());
             }
 
@@ -123,6 +136,7 @@ public class ProductDAO implements AutoCloseable {
                 selectStmt.setInt(1, product.id());
                 ResultSet rs = selectStmt.executeQuery();
                 if (!rs.next()) {
+                    logger.warn("Product not found for update, ID: {}", product.id());
                     throw new SQLException("No product found with ID: " + product.id());
                 }
 
@@ -141,10 +155,12 @@ public class ProductDAO implements AutoCloseable {
                     int rowsAffected = updateStmt.executeUpdate();
                     if (rowsAffected > 0) {
                         historyDAO.logProductHistory(product.id(), "UPDATE", oldValue, newValue);
+                        logger.info("Product updated, ID: {}", product.id());
                     }
                 }
             }
         } catch (IllegalArgumentException | ExpiredProductException e) {
+            logger.warn("Validation failed for update: {}", e.getMessage());
             throw e;
         } finally {
             lock.unlock();
@@ -155,6 +171,7 @@ public class ProductDAO implements AutoCloseable {
         lock.lock();
         try {
             if (id <= 0) {
+                logger.warn("Invalid product ID for delete: {}", id);
                 throw new IllegalArgumentException("Cannot delete product with invalid ID: " + id);
             }
             String deleteQuery = "DELETE FROM Product WHERE id = ?";
@@ -162,9 +179,11 @@ public class ProductDAO implements AutoCloseable {
                 stmt.setInt(1, id);
                 int rowsAffected = stmt.executeUpdate();
                 if (rowsAffected == 0) {
-                    throw new SQLException("No product found with ID: " + id); // Stays as-is
+                    logger.warn("Product not found for delete, ID: {}", id);
+                    throw new SQLException("No product found with ID: " + id);
                 }
                 historyDAO.logProductHistory(id, "DELETE", null, null);
+                logger.info("Product deleted, ID: {}", id);
             }
         } finally {
             lock.unlock();
@@ -175,6 +194,7 @@ public class ProductDAO implements AutoCloseable {
         lock.lock();
         try {
             if (id <= 0) {
+                logger.warn("Invalid product ID for stock adjust: {}", id);
                 throw new IllegalArgumentException("Cannot adjust stock for invalid ID: " + id);
             }
 
@@ -184,6 +204,7 @@ public class ProductDAO implements AutoCloseable {
                 selectStmt.setInt(1, id);
                 ResultSet rs = selectStmt.executeQuery();
                 if (!rs.next()) {
+                    logger.warn("Product not found for stock adjust, ID: {}", id);
                     throw new SQLException("No product found with ID: " + id);
                 }
                 currentStock = rs.getInt("stock");
@@ -191,6 +212,7 @@ public class ProductDAO implements AutoCloseable {
 
             int newStock = currentStock + amount;
             if (newStock < 0) {
+                logger.warn("Stock adjustment would go below 0, ID: {}, current: {}, change: {}", id, currentStock, amount);
                 throw new IllegalStateException("Stock cannot go below 0. Current: " + currentStock + ", Attempted change: " + amount);
             }
 
@@ -200,8 +222,10 @@ public class ProductDAO implements AutoCloseable {
                 updateStmt.setInt(2, id);
                 updateStmt.executeUpdate();
                 historyDAO.logProductHistory(id, "STOCK_ADJUST", "stock: " + currentStock, "stock: " + newStock);
+                logger.info("Stock adjusted, ID: {}, from {} to {}", id, currentStock, newStock);
             }
         } catch (SQLException e) {
+            logger.error("Error adjusting stock: {}", e.getMessage(), e);
             throw new RuntimeException("Error adjusting stock", e);
         } finally {
             lock.unlock();
@@ -210,6 +234,7 @@ public class ProductDAO implements AutoCloseable {
 
     @Override
     public void close() throws SQLException {
+        logger.debug("Closing ProductDAO.");
         // Connection closed by caller (Main)
     }
 }
