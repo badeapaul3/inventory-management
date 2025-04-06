@@ -27,15 +27,15 @@ public class ConfigManager {
     }
 
     private void loadProperties(){
-        try (InputStream input = ConfigManager.class.getClassLoader().getResourceAsStream("application.properties"))    {
+        try (InputStream input = ConfigManager.class.getClassLoader().getResourceAsStream("application.properties.old"))    {
             if(input == null){
-                logger.warn("application.properties not found, using defaults.");
+                logger.warn("application.properties.old not found, using defaults.");
                 return;
             }
             properties.load(input);
-            logger.info("Loaded configuration from application.properties.");
+            logger.info("Loaded configuration from application.properties.old.");
         }catch (IOException e){
-            logger.error("Failed to load application.properties: {}", e.getMessage(), e);
+            logger.error("Failed to load application.properties.old: {}", e.getMessage(), e);
         }
     }
 

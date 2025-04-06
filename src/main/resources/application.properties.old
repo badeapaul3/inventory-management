@@ -1,0 +1,9 @@
+# Database configuration
+db.url=jdbc:sqlite:inventory.sqlite
+
+# Logging configuration
+log.dir=./logs
+
+# Discount configuration
+discount.expiration.threshold.days=30
+discount.near.expiry.percent=20
